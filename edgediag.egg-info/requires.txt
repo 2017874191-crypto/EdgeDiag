@@ -1,0 +1,8 @@
+fastapi<1,>=0.115
+uvicorn[standard]<1,>=0.30
+paho-mqtt<3,>=2.1
+pydantic<3,>=2.8
+
+[dev]
+pytest>=8
+httpx>=0.27
