@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 import os
 from pathlib import Path
 from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 from protocol.models import Diagnosis, Telemetry
 from services.state import StateStore, ConflictError, CapacityError
@@ -41,11 +42,13 @@ def create_app():
             repository.close()
             store.close()
 
-    app = FastAPI(title="EdgeDiag", version="0.2.0", lifespan=lifespan)
+    app = FastAPI(title="EdgeDiag", version="0.2.1", lifespan=lifespan)
 
     @app.get("/health")
-    def health():
-        return {"status": "ok", "service": "edgediag", "version": "0.2.0"}
+    def health(request: Request):
+        health = request.app.state.jobs.health()
+        return JSONResponse({**health, "service": "edgediag", "version": "0.2.1"},
+                            status_code=200 if health["status"] == "ok" else 503)
 
     @app.post("/v1/telemetry", status_code=202)
     def ingest(message: Telemetry, request: Request):
@@ -62,6 +65,10 @@ def create_app():
     @app.get("/v1/incidents")
     def incidents(request: Request, limit: int = Query(default=100, ge=1, le=300)):
         return {"items": request.app.state.store.list_incidents(limit)}
+
+    @app.get("/v1/devices/{device_id}/quarantine")
+    def quarantine(device_id: str, request: Request, limit: int = Query(default=100, ge=1, le=300)):
+        return {"device_id": device_id, "items": request.app.state.store.quarantined(device_id, limit)}
 
     @app.get("/v1/incidents/{incident_id}")
     def incident(incident_id: str, request: Request):

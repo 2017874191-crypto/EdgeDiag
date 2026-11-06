@@ -57,9 +57,9 @@ def test_rules_workflow_collects_real_tool_results():
     assert run["diagnosis"]["mode"] == "rules"
     assert run["diagnosis"]["status"] == "degraded"
     assert run["diagnosis"]["confidence"] == 0
-    assert len(run["events"]) == 4
+    assert len(run["events"]) == 3
     assert all(e["status"] == "ok" for e in run["events"])
-    assert run["diagnosis"]["evidence"][-1]["data"][0]["synthetic"] is True
+    assert all(e["source"] != "search_device_manual" for e in run["diagnosis"]["evidence"])
 
 
 def test_model_tool_use_roundtrip():

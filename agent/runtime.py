@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from protocol.models import Diagnosis
 from agent.registry import ToolContext
 from agent.tools import build_registry
+from agent.contracts import WORKFLOW_VERSION
 
 
 class Finding(BaseModel):
@@ -37,7 +38,7 @@ class DiagnosticRuntime:
     async def run(self, incident, history):
         run = {"trace_id": uuid.uuid4().hex, "incident_id": incident.incident_id,
                "device_id": incident.device_id, "status": "running",
-               "workflow_version": "diagnose-v1", "started_at_ms": int(time.time()*1000),
+               "workflow_version": WORKFLOW_VERSION, "started_at_ms": int(time.time()*1000),
                "events": [], "diagnosis": None, "error": None}
         self.repository.save(run)
         try:
@@ -84,12 +85,14 @@ class DiagnosticRuntime:
             self.repository.save(run)
             return result
 
-        for name, args in [
+        preflight = [
             ("get_incident_context", {}),
             ("get_device_status", {"device_id": incident.device_id}),
             ("calculate_signal_features", {"device_id": incident.device_id, "metric": "temperature_c"}),
-            ("search_device_manual", {"query": incident.type}),
-        ]:
+        ]
+        if self.provider is not None:
+            preflight.append(("search_device_manual", {"query": incident.type}))
+        for name, args in preflight:
             result = await invoke(name, args)
             if not result["ok"]:
                 return self._fallback(incident, "evidence_unavailable", evidence)

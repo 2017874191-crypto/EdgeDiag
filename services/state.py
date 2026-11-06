@@ -9,8 +9,9 @@ from pathlib import Path
 from threading import RLock
 from protocol.models import Incident, Telemetry
 from services.anomaly import detect, stable_type
+from agent.contracts import WORKFLOW_VERSION
 
-WORKFLOW_VERSION = "diagnose-v1"
+MAX_FUTURE_SKEW_MS = 60_000
 
 
 class ConflictError(ValueError):
@@ -22,10 +23,11 @@ class CapacityError(RuntimeError):
 
 
 class StateStore:
-    def __init__(self, path=":memory:", history_size=300, capacity=256):
+    def __init__(self, path=":memory:", history_size=300, capacity=256, clock_ms=None):
         if str(path) != ":memory:":
             Path(path).parent.mkdir(parents=True, exist_ok=True)
         self._lock = RLock()
+        self.clock_ms = clock_ms or (lambda: int(time.time()*1000))
         self.history_size, self.capacity = history_size, capacity
         self.db = sqlite3.connect(str(path), check_same_thread=False, isolation_level=None)
         self.db.row_factory = sqlite3.Row
@@ -50,6 +52,19 @@ class StateStore:
                 status TEXT NOT NULL, snapshot TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0,
                 result TEXT, error TEXT, created_ms INTEGER NOT NULL);
         """)
+        # Additive migration: preserve raw samples, quarantine legacy future rows.
+        columns = {r["name"] for r in self.db.execute("PRAGMA table_info(telemetry)")}
+        with self.transaction() as db:
+            if "clock_valid" not in columns:
+                db.execute("ALTER TABLE telemetry ADD COLUMN clock_valid INTEGER NOT NULL DEFAULT 1")
+            if "clock_checked_ms" not in columns:
+                db.execute("ALTER TABLE telemetry ADD COLUMN clock_checked_ms INTEGER")
+            checked_ms = self.clock_ms()
+            db.execute("UPDATE telemetry SET clock_valid=0,clock_checked_ms=? WHERE clock_valid=1 AND timestamp_ms>?",
+                       (checked_ms, checked_ms + MAX_FUTURE_SKEW_MS))
+            db.execute("""UPDATE devices SET watermark_ms=COALESCE(
+                (SELECT MAX(timestamp_ms) FROM telemetry
+                 WHERE telemetry.device_id=devices.device_id AND clock_valid=1), -1)""")
 
     @contextmanager
     def transaction(self):
@@ -64,7 +79,7 @@ class StateStore:
 
     def _history(self, db, device_id, limit=300):
         rows = db.execute(
-            "SELECT body FROM telemetry WHERE device_id=? ORDER BY timestamp_ms DESC,id DESC LIMIT ?",
+            "SELECT body FROM telemetry WHERE device_id=? AND clock_valid=1 ORDER BY timestamp_ms DESC,id DESC LIMIT ?",
             (device_id, limit)).fetchall()
         return [Telemetry.model_validate_json(r["body"]) for r in reversed(rows)]
 
@@ -90,11 +105,14 @@ class StateStore:
                 if Telemetry.model_validate_json(duplicate["body"]) != message:
                     raise ConflictError("sequence reused with different payload")
                 return {"accepted": False, "reason": "duplicate", "incidents": []}
-            db.execute("INSERT INTO telemetry(device_id,boot_id,seq,timestamp_ms,body) VALUES(?,?,?,?,?)",
-                       (message.device_id, message.boot_id, message.seq, message.timestamp_ms, body))
+            now = self.clock_ms()
+            clock_valid = message.timestamp_ms <= now + MAX_FUTURE_SKEW_MS
+            db.execute("INSERT INTO telemetry(device_id,boot_id,seq,timestamp_ms,body,clock_valid,clock_checked_ms) VALUES(?,?,?,?,?,?,?)",
+                       (message.device_id, message.boot_id, message.seq, message.timestamp_ms, body, int(clock_valid), now))
+            if not clock_valid:
+                return {"accepted": True, "reason": "clock_quarantined", "incidents": []}
             current = db.execute("SELECT watermark_ms FROM devices WHERE device_id=?", (message.device_id,)).fetchone()
             watermark = current["watermark_ms"] if current else -1
-            now = int(time.time()*1000)
             db.execute("""INSERT INTO devices VALUES(?,?,?)
                           ON CONFLICT(device_id) DO UPDATE SET
                           watermark_ms=MAX(watermark_ms,excluded.watermark_ms), received_ms=excluded.received_ms""",
@@ -130,6 +148,14 @@ class StateStore:
                 self._event(db, candidate, kind, message)
                 changed.append(candidate)
             return {"accepted": True, "reason": "accepted", "incidents": changed}
+
+    def quarantined(self, device_id, limit=100):
+        with self._lock:
+            return [{"reason": "future_clock", "checked_ms": r["clock_checked_ms"],
+                     "max_future_skew_ms": MAX_FUTURE_SKEW_MS, "telemetry": json.loads(r["body"])}
+                    for r in self.db.execute(
+                        "SELECT body,clock_checked_ms FROM telemetry WHERE device_id=? AND clock_valid=0 ORDER BY id DESC LIMIT ?",
+                        (device_id, limit))]
 
     def accept(self, message):
         return self.ingest(message)["accepted"]

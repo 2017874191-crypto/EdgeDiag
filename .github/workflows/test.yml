@@ -13,5 +13,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - run: python -m pip install -e ".[dev]"
       - run: python -m pytest -q
+      - name: Paired mechanism ablations
+        run: python -m pytest audit/test_ablations.py -q
       - run: python -m pip wheel --no-deps . -w dist
       - run: docker compose config --quiet

@@ -1,0 +1,147 @@
+{
+  "schema_version": 1,
+  "kind": "paired deterministic mechanism probes",
+  "baseline_commit": "837945bcf52e540d4939cfd2c93dc90f2bbb009c",
+  "working_tree_modified": true,
+  "source_sha256": {
+    "services/jobs.py": "f2f6f339bffe236db474e45a46eac76350598e47ff784ebf5dd521296b29d4d5",
+    "services/state.py": "4d405caad2c14f4a78cbbd4572e6f59599680a2d064b810642532b75180e916c",
+    "agent/runtime.py": "56dd185f0d6dd04d73308c8f0b3245130a6bdb85b17def6b023032949f7a2bb8",
+    "agent/contracts.py": "2ada55c6520537c146f8c8e41d30ab896c2dfeaf8264d251cd34d33e306b6107",
+    "audit/test_ablations.py": "1ed682209ba0a932599f0eb1dbb6e86fc7a2aeaa15a9fb88d94f1874707f8768"
+  },
+  "cases": [
+    {
+      "mechanism": "atomic_ingestion",
+      "full": {
+        "samples": 2,
+        "incidents": 0
+      },
+      "ablated": {
+        "samples": 3,
+        "incidents": 1
+      },
+      "claim": "failure after incident write does not partially commit"
+    },
+    {
+      "mechanism": "sustained_window_spike",
+      "full": 0,
+      "ablated": 1,
+      "claim": "isolated spike creates no incident; not a measured field false-alarm rate"
+    },
+    {
+      "mechanism": "sustained_window_delay",
+      "full": 3,
+      "ablated": 1,
+      "claim": "spike rejection costs two samples of latency on this fixed trace"
+    },
+    {
+      "mechanism": "maximum_sample_gap",
+      "full": 0,
+      "ablated": 1,
+      "claim": "widely separated samples are not called sustained"
+    },
+    {
+      "mechanism": "request_receipt",
+      "full": 1,
+      "ablated": 2,
+      "claim": "two retry attempts share a job; ablation intentionally removes stable request identity"
+    },
+    {
+      "mechanism": "device_scope",
+      "full": false,
+      "ablated": true,
+      "claim": "cross-device arguments cannot reach this scoped handler"
+    },
+    {
+      "mechanism": "tool_deadline",
+      "full": false,
+      "ablated": true,
+      "claim": "slow handler is cut off; test-only ablation retains a one-second safety cap"
+    },
+    {
+      "mechanism": "citation_membership",
+      "full": "rules",
+      "ablated": "agent",
+      "claim": "unknown evidence IDs do not become accepted reports; no semantic grounding claim"
+    },
+    {
+      "mechanism": "database_unique_constraint",
+      "full": {
+        "normal_path_rows": 1,
+        "after_bypass_writer": 1
+      },
+      "ablated": {
+        "normal_path_rows": 1,
+        "after_bypass_writer": 2
+      },
+      "claim": "negative control: sequential API dedup alone has no difference; constraint protects bypass writers"
+    },
+    {
+      "mechanism": "frozen_telemetry_snapshot",
+      "full": 3,
+      "ablated": 4,
+      "claim": "later samples cannot change a submitted task's telemetry context"
+    },
+    {
+      "mechanism": "pending_capacity",
+      "full": 1,
+      "ablated": 2,
+      "claim": "admission stays within fixture capacity; no throughput benchmark"
+    },
+    {
+      "mechanism": "interrupted_job_requeue",
+      "full": true,
+      "ablated": false,
+      "claim": "single-owner restart can claim abandoned read-only work"
+    },
+    {
+      "mechanism": "rules_manual_lookup_negative_control",
+      "full": {
+        "summary": "温度与振动同时异常；润滑、负载或偏心均需进一步核验。",
+        "tool_calls": 3,
+        "mode": "rules"
+      },
+      "ablated": {
+        "summary": "温度与振动同时异常；润滑、负载或偏心均需进一步核验。",
+        "tool_calls": 3,
+        "mode": "rules"
+      },
+      "claim": "post-fix rules path already skips retrieval: removing the optional branch has no further effect"
+    },
+    {
+      "mechanism": "transient_claim_retry",
+      "full": {
+        "status": "completed",
+        "alive": 1
+      },
+      "ablated": {
+        "status": "queued",
+        "alive": 0
+      },
+      "claim": "one transient failure recovers; removing retry strands work"
+    },
+    {
+      "mechanism": "future_clock_quarantine",
+      "full": 1,
+      "ablated": 0,
+      "claim": "quarantine prevents a future packet suppressing corrected-clock anomalies"
+    },
+    {
+      "mechanism": "workflow_version_gate",
+      "full": {
+        "status": "failed",
+        "runtime_calls": 0
+      },
+      "ablated": {
+        "status": "completed",
+        "runtime_calls": 1
+      },
+      "claim": "unsupported snapshots are rejected before runtime invocation"
+    }
+  ],
+  "limitations": [
+    "No production accuracy, real model quality, hardware timing or Broker delivery claim.",
+    "Each row uses its own controlled fixture; outcomes are not one shared score."
+  ]
+}

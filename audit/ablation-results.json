@@ -1,0 +1,109 @@
+{
+  "schema_version": 1,
+  "kind": "paired deterministic mechanism probes",
+  "baseline_commit": "837945b",
+  "cases": [
+    {
+      "mechanism": "atomic_ingestion",
+      "full": {
+        "samples": 2,
+        "incidents": 0
+      },
+      "ablated": {
+        "samples": 3,
+        "incidents": 1
+      },
+      "claim": "failure after incident write does not partially commit"
+    },
+    {
+      "mechanism": "sustained_window_spike",
+      "full": 0,
+      "ablated": 1,
+      "claim": "isolated spike creates no incident; not a measured field false-alarm rate"
+    },
+    {
+      "mechanism": "sustained_window_delay",
+      "full": 3,
+      "ablated": 1,
+      "claim": "spike rejection costs two samples of latency on this fixed trace"
+    },
+    {
+      "mechanism": "maximum_sample_gap",
+      "full": 0,
+      "ablated": 1,
+      "claim": "widely separated samples are not called sustained"
+    },
+    {
+      "mechanism": "request_receipt",
+      "full": 1,
+      "ablated": 2,
+      "claim": "two retry attempts share a job; ablation intentionally removes stable request identity"
+    },
+    {
+      "mechanism": "device_scope",
+      "full": false,
+      "ablated": true,
+      "claim": "cross-device arguments cannot reach this scoped handler"
+    },
+    {
+      "mechanism": "tool_deadline",
+      "full": false,
+      "ablated": true,
+      "claim": "slow handler is cut off; test-only ablation retains a one-second safety cap"
+    },
+    {
+      "mechanism": "citation_membership",
+      "full": "rules",
+      "ablated": "agent",
+      "claim": "unknown evidence IDs do not become accepted reports; no semantic grounding claim"
+    },
+    {
+      "mechanism": "database_unique_constraint",
+      "full": {
+        "normal_path_rows": 1,
+        "after_bypass_writer": 1
+      },
+      "ablated": {
+        "normal_path_rows": 1,
+        "after_bypass_writer": 2
+      },
+      "claim": "negative control: sequential API dedup alone has no difference; constraint protects bypass writers"
+    },
+    {
+      "mechanism": "frozen_telemetry_snapshot",
+      "full": 3,
+      "ablated": 4,
+      "claim": "later samples cannot change a submitted task's telemetry context"
+    },
+    {
+      "mechanism": "pending_capacity",
+      "full": 1,
+      "ablated": 2,
+      "claim": "admission stays within fixture capacity; no throughput benchmark"
+    },
+    {
+      "mechanism": "interrupted_job_requeue",
+      "full": true,
+      "ablated": false,
+      "claim": "single-owner restart can claim abandoned read-only work"
+    },
+    {
+      "mechanism": "rules_manual_lookup_negative_control",
+      "full": {
+        "summary": "温度与振动同时异常；润滑、负载或偏心均需进一步核验。",
+        "tool_calls": 4,
+        "mode": "rules"
+      },
+      "ablated": {
+        "summary": "温度与振动同时异常；润滑、负载或偏心均需进一步核验。",
+        "tool_calls": 3,
+        "mode": "rules"
+      },
+      "claim": "one fewer tool call leaves this rules summary unchanged; not proof manuals are useless in model mode"
+    }
+  ],
+  "limitations": [
+    "No production accuracy, real model quality, hardware timing or Broker delivery claim.",
+    "Each row uses its own controlled fixture; outcomes are not one shared score."
+  ]
+}

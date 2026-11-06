@@ -26,7 +26,7 @@ python -m scripts.demo_diagnosis
 
 ## Agent 模式
 
-默认 `AGENT_PROVIDER=rules` 无需模型账户，执行 4 个工具并返回 `status=degraded, mode=rules, fallback_reason=provider_disabled`。
+默认 `AGENT_PROVIDER=rules` 无需模型账户，执行 3 个证据工具并返回 `status=degraded, mode=rules, fallback_reason=provider_disabled`。模型模式才执行手册检索。
 
 复制 `.env.example` 为 `.env`，设置 `AGENT_PROVIDER=anthropic`、`ANTHROPIC_API_KEY`、`ANTHROPIC_MODEL`；如使用兼容网关，同时配置 `ANTHROPIC_BASE_URL`。随后重新启动 Compose。
 
@@ -38,6 +38,7 @@ python -m scripts.demo_diagnosis
 |---|---|
 | POST /v1/telemetry | 遥测校验与去重 |
 | GET /v1/devices/{device_id}/telemetry | 有界、按测量时间排序的历史 |
+| GET /v1/devices/{device_id}/quarantine | 查看未来时钟隔离数据和检查依据 |
 | GET /v1/incidents | 查看持久化异常 |
 | GET /v1/incidents/{id}/events | 查看异常开启、更新、恢复记录 |
 | POST /v1/incidents/{id}/jobs | 提交有界持久任务，返回 202；支持 request_key 与 expected_revision |
@@ -60,7 +61,7 @@ docker compose config --quiet
 
 遥测、Incident、状态事件、任务快照与诊断记录均持久化到 SQLite。持续窗口规则与告警归并、幂等请求回执、2 个 worker/256 个待处理任务上限、只读任务中断恢复已经实现。详见[持久化与任务语义](docs/persistence-and-jobs.md)。
 
-运行单个 API 进程。尚未提供 MQTT 事件自动提交诊断、诊断结果下发、设备命令 ACK、Outbox、TLS/ACL 和真实固件；设备时钟纠偏与存储保留策略也待补齐。
+运行单个 API 进程。已实现未来时间隔离和旧水位修复，尚未提供完整时钟同步/回退处理。MQTT 事件自动提交诊断、结果下发、设备命令 ACK、Outbox、TLS/ACL、存储保留策略和真实固件仍待补齐。
 
 ## 目录
 
@@ -76,3 +77,13 @@ deploy/            本机 MQTT 配置
 ```
 
 实现参考与固定版本见 [复用依据](docs/agent-workflow.md#复用依据)。
+
+## 工程审查方法
+
+新增核心机制遵循 [AGENTS.md](AGENTS.md)：先定义不变量，再做对抗性审查与成对消融，并说明最小方案、成本及未验证边界。
+
+原基线审查见 [837945b 审查报告](docs/reviews/837945b-adversarial-review.md)。3 项问题已转普通回归并修复，证据与取舍见[修复验收](docs/reviews/audit-fixes-validation.md)。这不代表系统不存在其他缺陷。
+
+运行消融：`python -m audit.run_ablations`。原反例现在位于 `tests/test_audit_regressions.py` 并包含在默认回归中，历史入口仍可运行，当前 3 项通过，无 xfail。
+
+`/health` 现在检查 worker 就绪状态，异常时返回 503。当前执行版本为 `diagnose-v2`；旧排队 v1 任务失败关闭，不自动套用新语义。升级和请求 key 的处理见修复验收。
