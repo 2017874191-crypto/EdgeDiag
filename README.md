@@ -22,7 +22,7 @@ python -m device_simulator --scenario bearing_fault --duration 30
 python -m scripts.demo_diagnosis
 ```
 
-演示脚本通过 HTTP 注入一条异常遥测、创建诊断并读取持久化 Trace。MQTT 模拟器负责验证消息接入；当前诊断需要通过 API 触发，尚未自动从 MQTT 事件调度。
+演示脚本通过 HTTP 注入连续 3 条异常遥测、创建诊断、重放相同请求并校验持久化 Trace。MQTT 模拟器负责验证消息接入；当前诊断仍需 API 提交，尚未自动从 MQTT 事件调度。
 
 ## Agent 模式
 
@@ -38,7 +38,10 @@ python -m scripts.demo_diagnosis
 |---|---|
 | POST /v1/telemetry | 遥测校验与去重 |
 | GET /v1/devices/{device_id}/telemetry | 有界、按测量时间排序的历史 |
-| GET /v1/incidents | 查看当前内存中的异常 |
+| GET /v1/incidents | 查看持久化异常 |
+| GET /v1/incidents/{id}/events | 查看异常开启、更新、恢复记录 |
+| POST /v1/incidents/{id}/jobs | 提交有界持久任务，返回 202；支持 request_key 与 expected_revision |
+| GET /v1/jobs/{job_id} | 查询排队、执行与结果 |
 | POST /v1/incidents/{id}/runs | 执行诊断，返回 trace_id、工具记录和报告 |
 | GET /v1/runs/{trace_id} | 查询持久化诊断 |
 | POST /v1/incidents/{id}/diagnose | 兼容接口，仅返回报告 |
@@ -55,7 +58,9 @@ docker compose config --quiet
 
 ## 当前限制
 
-遥测和 Incident 仍在内存中；SQLite 只持久化诊断记录和证据。当前规则为单点阈值，尚未加入持续窗口/告警归并。诊断结果尚未通过 MQTT 下发，命令 ACK、持久 Outbox、TLS/ACL、自动任务恢复和真实固件均待实现。运行单个 API worker。
+遥测、Incident、状态事件、任务快照与诊断记录均持久化到 SQLite。持续窗口规则与告警归并、幂等请求回执、2 个 worker/256 个待处理任务上限、只读任务中断恢复已经实现。详见[持久化与任务语义](docs/persistence-and-jobs.md)。
+
+运行单个 API 进程。尚未提供 MQTT 事件自动提交诊断、诊断结果下发、设备命令 ACK、Outbox、TLS/ACL 和真实固件；设备时钟纠偏与存储保留策略也待补齐。
 
 ## 目录
 

@@ -198,9 +198,9 @@ def test_empty_retrieval_and_invalid_samples():
 def test_api_returns_trace_and_persists_it():
     from fastapi.testclient import TestClient
     from services.app import app
+    from tests.test_service import trigger
     with TestClient(app) as client:
-        response = client.post("/v1/telemetry", json=sample(123).model_dump(mode="json"))
-        iid = response.json()["incidents"][0]["incident_id"]
+        iid = trigger(client)
         run = client.post(f"/v1/incidents/{iid}/runs").json()
         assert run["diagnosis"]["status"] == "degraded"
         assert client.get("/v1/runs/" + run["trace_id"]).json() == run

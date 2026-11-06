@@ -4,7 +4,6 @@ import logging
 import os
 import paho.mqtt.client as mqtt
 from protocol.models import Telemetry
-from services.anomaly import detect
 from services.state import StateStore
 
 logger = logging.getLogger(__name__)
@@ -15,7 +14,10 @@ class TelemetryConsumer:
         self.store = store
         self.host = os.getenv("MQTT_HOST", "localhost")
         self.port = int(os.getenv("MQTT_PORT", "1883"))
-        self.client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id="edgediag-ingestion")
+        self.client = mqtt.Client(
+            mqtt.CallbackAPIVersion.VERSION2,
+            client_id=os.getenv("MQTT_CLIENT_ID", "edgediag-ingestion"),
+            clean_session=False, manual_ack=True)
         self.client.on_connect = self._on_connect
         self.client.on_message = self._on_message
 
@@ -31,11 +33,17 @@ class TelemetryConsumer:
             telemetry = Telemetry.model_validate_json(message.payload)
             if message.topic != f"device/{telemetry.device_id}/telemetry":
                 raise ValueError("topic/payload device mismatch")
-            if self.store.accept(telemetry):
-                for incident in detect(telemetry, self.store.history(telemetry.device_id)):
-                    self.store.add_incident(incident)
+            self.store.ingest(telemetry)
+        except ValueError:
+            # Malformed or conflicting packets are poison messages: discard and acknowledge.
+            logger.warning("discarded invalid telemetry topic=%s", message.topic)
         except Exception:
-            logger.exception("invalid telemetry topic=%s", message.topic)
+            # Do not acknowledge transient storage failures. A persistent broker session
+            # can redeliver unacknowledged QoS1 messages when the connection is restored.
+            logger.exception("telemetry persistence failed topic=%s", message.topic)
+            return
+        if getattr(message, "qos", 0):
+            client.ack(message.mid, message.qos)
 
     def start(self) -> None:
         if os.getenv("MQTT_ENABLED", "true").lower() not in {"1", "true", "yes"}:

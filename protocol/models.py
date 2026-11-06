@@ -32,6 +32,8 @@ class Incident(BaseModel):
     detector: str = "rule_v1"
     confidence: float = Field(ge=0, le=1)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    revision: int = Field(default=1, ge=1)
+    occurrences: int = Field(default=1, ge=1)
 
 
 class Diagnosis(BaseModel):

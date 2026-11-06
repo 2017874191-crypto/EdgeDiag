@@ -1,25 +1,29 @@
 from fastapi.testclient import TestClient
-from services.app import app, store
+from services.app import create_app
 
 
-def test_ingest_deduplicates_and_detects_anomaly():
-    store.telemetry.clear()
-    store.incidents.clear()
-    store.seen.clear()
-    message = {
-        "device_id": "motor-test", "boot_id": "boot-test", "seq": 1,
-        "timestamp_ms": 1, "firmware_version": "sim-0.1.0",
-        "metrics": {"temperature_c": 85, "vibration_rms": 1.8},
-    }
-    with TestClient(app) as client:
-        first = client.post("/v1/telemetry", json=message)
-        second = client.post("/v1/telemetry", json=message)
-    assert first.status_code == 202
-    assert first.json()["accepted"] is True
-    assert len(first.json()["incidents"]) == 3
-    assert second.json()["accepted"] is False
+def message(seq=1, timestamp=1000, boot="boot-test", temperature=85, vibration=1.8):
+    return {"device_id": "motor-test", "boot_id": boot, "seq": seq,
+            "timestamp_ms": timestamp, "firmware_version": "sim-0.1.0",
+            "metrics": {"temperature_c": temperature, "vibration_rms": vibration}}
+
+
+def trigger(client):
+    for n in range(1, 4):
+        response = client.post("/v1/telemetry", json=message(n, n*1000))
+        assert response.status_code == 202
+    return response.json()["incidents"][0]["incident_id"]
+
+
+def test_ingest_deduplicates_and_detects_sustained_anomaly():
+    with TestClient(create_app()) as client:
+        iid = trigger(client)
+        second = client.post("/v1/telemetry", json=message(3, 3000))
+        assert second.json()["accepted"] is False
+        assert client.get("/v1/incidents/" + iid).json()["type"] == "thermal_vibration"
+        assert len(client.get("/v1/incidents").json()["items"]) == 1
 
 
 def test_health():
-    with TestClient(app) as client:
+    with TestClient(create_app()) as client:
         assert client.get("/health").json()["status"] == "ok"

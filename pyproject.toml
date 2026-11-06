@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "edgediag"
-version = "0.1.0"
+version = "0.2.0"
 description = "Industrial device telemetry and diagnosis foundation"
 requires-python = ">=3.11"
 dependencies = [

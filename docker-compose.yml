@@ -5,6 +5,7 @@ services:
       - "127.0.0.1:1883:1883"
     volumes:
       - ./deploy/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - mqtt-data:/mosquitto/data
 
   api:
     build: .
@@ -18,6 +19,7 @@ services:
       ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-}
       ANTHROPIC_BASE_URL: ${ANTHROPIC_BASE_URL:-https://api.anthropic.com}
       DIAGNOSTIC_DB: /data/diagnostics.sqlite3
+      DOMAIN_DB: /data/domain.sqlite3
     volumes:
       - diagnostic-data:/data
     ports:
@@ -27,3 +29,4 @@ services:
 
 volumes:
   diagnostic-data:
+  mqtt-data:
