@@ -1,50 +1,33 @@
 from __future__ import annotations
 
-import json
 import os
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query, Request
 from protocol.models import Diagnosis, Telemetry
-from protocol.topics import Topics
 from services.anomaly import detect
 from services.state import StateStore
 from services.mqtt_consumer import TelemetryConsumer
+from agent.knowledge import KnowledgeBase
+from agent.provider import from_environment
+from agent.repository import RunRepository
+from agent.runtime import DiagnosticRuntime
 
 store = StateStore()
 consumer = TelemetryConsumer(store)
 
 
-def build_diagnosis(incident_id: str) -> Diagnosis:
-    incident = store.get_incident(incident_id)
-    if incident is None:
-        raise HTTPException(status_code=404, detail="incident not found")
-    mapping = {
-        "thermal": "疑似过热，请检查散热和负载",
-        "vibration": "疑似机械振动异常，请检查轴承、紧固件和偏心",
-        "thermal_vibration": "温度和振动同时异常，优先检查轴承润滑和机械偏心",
-        "sensor_invalid": "传感器数据无效，请检查传感器连接和供电",
-        "offline": "设备未按预期上报数据，请检查网络和设备电源",
-    }
-    history = store.history(incident.device_id)
-    evidence = [incident.evidence, {"history_samples": len(history)}]
-    return Diagnosis(
-        incident_id=incident.incident_id,
-        device_id=incident.device_id,
-        status="diagnosed",
-        severity=incident.severity,
-        summary=mapping[incident.type],
-        confidence=incident.confidence,
-        evidence=evidence,
-        hypotheses=[{"cause": mapping[incident.type], "confidence": incident.confidence}],
-        recommendations=[{"action": mapping[incident.type], "risk": "low", "requires_confirmation": False}],
-    )
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    repository = RunRepository(os.getenv("DIAGNOSTIC_DB", "data/diagnostics.sqlite3"))
+    app.state.runtime = DiagnosticRuntime(repository, KnowledgeBase(), from_environment())
     consumer.start()
-    yield
-    consumer.stop()
+    try:
+        yield
+    finally:
+        consumer.stop()
+        repository.close()
 
 
 app = FastAPI(title="EdgeDiag", version="0.1.0", lifespan=lifespan)
@@ -72,7 +55,7 @@ def ingest(message: Telemetry):
 
 
 @app.get("/v1/devices/{device_id}/telemetry")
-def telemetry(device_id: str, limit: int = 100):
+def telemetry(device_id: str, limit: int = Query(default=100, ge=1, le=300)):
     return {"device_id": device_id, "items": [item.model_dump(mode="json") for item in store.history(device_id, min(limit, 300))]}
 
 
@@ -85,5 +68,39 @@ def incident(incident_id: str):
 
 
 @app.post("/v1/incidents/{incident_id}/diagnose", response_model=Diagnosis)
-def diagnose(incident_id: str):
-    return build_diagnosis(incident_id)
+async def diagnose(incident_id: str, request: Request):
+    run = await run_diagnosis(incident_id, request)
+    return run["diagnosis"]
+
+
+async def run_diagnosis(incident_id: str, request: Request):
+    incident = store.get_incident(incident_id)
+    if incident is None:
+        raise HTTPException(status_code=404, detail="incident not found")
+    return await request.app.state.runtime.run(
+        incident.model_copy(deep=True), store.history(incident.device_id, 300))
+
+
+@app.post("/v1/incidents/{incident_id}/runs")
+async def create_run(incident_id: str, request: Request):
+    """Bounded synchronous workflow; return trace_id plus validated diagnosis."""
+    return await run_diagnosis(incident_id, request)
+
+
+@app.get("/v1/runs/{trace_id}")
+def get_run(trace_id: str, request: Request):
+    run = request.app.state.runtime.repository.get(trace_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="run not found")
+    return run
+
+
+@app.get("/v1/tools")
+def tools():
+    from agent.tools import build_registry
+    return build_registry([], None, KnowledgeBase()).definitions()
+
+
+@app.get("/v1/incidents")
+def incidents():
+    return {"items": store.list_incidents()}

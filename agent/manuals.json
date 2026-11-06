@@ -1,0 +1,37 @@
+[
+  {
+    "document_id": "demo-motor-thermal-v1",
+    "version": "1",
+    "section": "thermal",
+    "synthetic": true,
+    "tags": [
+      "thermal",
+      "temperature",
+      "thermal_vibration"
+    ],
+    "text": "演示指导：温度持续上升可先核查环境温度、散热和负载。仅凭温度不能确认机械故障。检查旋转部件前需断电并由人员确认安全。"
+  },
+  {
+    "document_id": "demo-motor-vibration-v1",
+    "version": "1",
+    "section": "vibration",
+    "synthetic": true,
+    "tags": [
+      "vibration",
+      "bearing",
+      "thermal_vibration"
+    ],
+    "text": "演示指导：振动升高可能与安装松动、偏心或轴承状态有关。需要核对转速、传感器安装和频谱。温度与振动同时升高只能形成待核实假设。检查前断电。"
+  },
+  {
+    "document_id": "demo-sensor-v1",
+    "version": "1",
+    "section": "sensor",
+    "synthetic": true,
+    "tags": [
+      "sensor_invalid",
+      "offline"
+    ],
+    "text": "演示指导：数据无效或离线时，优先核查传感器供电、连接、设备心跳和网络；无有效测量时应暂缓机械故障结论。"
+  }
+]

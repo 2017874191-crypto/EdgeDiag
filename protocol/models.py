@@ -11,9 +11,9 @@ class Quality(BaseModel):
 
 
 class Telemetry(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    schema_version: int = Field(default=1, ge=1)
-    device_id: str = Field(min_length=1, max_length=128)
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+    schema_version: Literal[1] = 1
+    device_id: str = Field(min_length=1, max_length=128, pattern=r"^[a-zA-Z0-9_-]+$")
     boot_id: str = Field(min_length=1, max_length=128)
     seq: int = Field(ge=0)
     timestamp_ms: int = Field(ge=0)
@@ -45,6 +45,9 @@ class Diagnosis(BaseModel):
     hypotheses: list[dict[str, Any]] = Field(default_factory=list)
     recommendations: list[dict[str, Any]] = Field(default_factory=list)
     requires_confirmation: bool = False
+    mode: Literal["rules", "agent"] = "rules"
+    fallback_reason: str | None = None
+    document_ids: list[str] = Field(default_factory=list)
 
 
 class Command(BaseModel):

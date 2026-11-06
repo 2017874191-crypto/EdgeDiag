@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-import json
 import logging
 import os
-import threading
 import paho.mqtt.client as mqtt
 from protocol.models import Telemetry
 from services.anomaly import detect
@@ -20,7 +18,6 @@ class TelemetryConsumer:
         self.client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id="edgediag-ingestion")
         self.client.on_connect = self._on_connect
         self.client.on_message = self._on_message
-        self._thread: threading.Thread | None = None
 
     def _on_connect(self, client, userdata, flags, reason_code, properties=None):
         if reason_code == 0:
@@ -32,6 +29,8 @@ class TelemetryConsumer:
     def _on_message(self, client, userdata, message):
         try:
             telemetry = Telemetry.model_validate_json(message.payload)
+            if message.topic != f"device/{telemetry.device_id}/telemetry":
+                raise ValueError("topic/payload device mismatch")
             if self.store.accept(telemetry):
                 for incident in detect(telemetry, self.store.history(telemetry.device_id)):
                     self.store.add_incident(incident)

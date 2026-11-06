@@ -15,6 +15,7 @@ def detect(message: Telemetry, history: list[Telemetry]) -> list[Incident]:
             type="sensor_invalid", severity="medium", confidence=0.99,
             evidence={"quality": message.quality.model_dump()},
         ))
+        return result
     if temperature is not None and temperature >= 80:
         result.append(Incident(
             incident_id=f"inc-{uuid.uuid4().hex[:12]}", device_id=message.device_id,

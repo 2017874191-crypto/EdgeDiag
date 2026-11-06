@@ -2,7 +2,7 @@ services:
   mqtt:
     image: eclipse-mosquitto:2
     ports:
-      - "1883:1883"
+      - "127.0.0.1:1883:1883"
     volumes:
       - ./deploy/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
 
@@ -13,8 +13,17 @@ services:
       MQTT_ENABLED: "true"
       MQTT_HOST: mqtt
       MQTT_PORT: "1883"
+      AGENT_PROVIDER: ${AGENT_PROVIDER:-rules}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-}
+      ANTHROPIC_BASE_URL: ${ANTHROPIC_BASE_URL:-https://api.anthropic.com}
+      DIAGNOSTIC_DB: /data/diagnostics.sqlite3
+    volumes:
+      - diagnostic-data:/data
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     depends_on:
       - mqtt
 
+volumes:
+  diagnostic-data:

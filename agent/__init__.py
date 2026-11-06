@@ -1,0 +1,1 @@
+"""Bounded device diagnosis workflow."""
